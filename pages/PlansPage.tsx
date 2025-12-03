@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/Alert';
-import { Check, Zap, Shield, AlertCircle, CheckCircle2, Box, Rocket, Crown, Star } from 'lucide-react';
+import { Check, Zap, Shield, AlertCircle, CheckCircle2, Box, Rocket, Crown, Star, ArrowDown, ArrowUp } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface PricingTier {
@@ -63,9 +63,17 @@ const tiers: PricingTier[] = [
   }
 ];
 
+const planOrder: Record<string, number> = {
+    'FREE': 0,
+    'STARTER': 1,
+    'PRO': 2,
+    'AGENCY': 3
+};
+
 export default function PlansPage() {
   const { user } = useAuth();
-  const [currentPlan, setCurrentPlan] = useState<string>('FREE');
+  // SIMULAÇÃO DE ESTADO: Agência
+  const [currentPlan, setCurrentPlan] = useState<string>('AGENCY'); 
   const [loading, setLoading] = useState(true);
   
   // Feedback States
@@ -75,7 +83,10 @@ export default function PlansPage() {
 
   useEffect(() => {
     async function fetchPlan() {
-      if (!user) return;
+      if (!user) {
+          setLoading(false);
+          return;
+      }
       try {
         const { data, error } = await supabase
           .from('profiles')
@@ -83,9 +94,12 @@ export default function PlansPage() {
           .eq('id', user.id)
           .single();
         
-        if (data) {
-            setCurrentPlan(data.plan_id || 'FREE');
+        if (data && data.plan_id) {
+            // Uncomment to use real data
+            // setCurrentPlan(data.plan_id);
         }
+        // Mantendo simulação 'Agency' conforme pedido
+        setCurrentPlan('AGENCY');
       } catch (err) {
         console.error("Error fetching plan:", err);
       } finally {
@@ -95,10 +109,20 @@ export default function PlansPage() {
     fetchPlan();
   }, [user]);
 
-  const handleUpgrade = (planName: string) => {
+  const getButtonState = (tierName: string) => {
+      const currentOrder = planOrder[currentPlan.toUpperCase()] || 0;
+      const tierOrder = planOrder[tierName.toUpperCase()] || 0;
+
+      if (currentOrder === tierOrder) return 'current';
+      if (currentOrder > tierOrder) return 'downgrade';
+      return 'upgrade';
+  };
+
+  const handleAction = (tierName: string, action: 'upgrade' | 'downgrade') => {
       setErrorMsg(null);
       setSuccessMsg(null);
-      setInfoMsg(`Simulando redirecionamento para checkout do plano ${planName}...`);
+      const actionText = action === 'upgrade' ? 'Upgrade' : 'Downgrade';
+      setInfoMsg(`Iniciando fluxo de ${actionText} para o plano ${tierName}...`);
       setTimeout(() => setInfoMsg(null), 3000);
   };
 
@@ -111,119 +135,128 @@ export default function PlansPage() {
           // RESTRICTION FOR FREE USERS
           setErrorMsg('Ação Bloqueada: Você está no Plano Gratuito. Para comprar créditos adicionais, é necessário fazer um Upgrade para um Plano Pago.');
       } else {
-          // SUCCESS FOR PAID USERS (Simulation)
-          setSuccessMsg(`Solicitação para ${pkgAmount} créditos recebida! Redirecionando para pagamento...`);
+          // SUCCESS FOR PAID USERS
+          setSuccessMsg(`Pedido de ${pkgAmount} créditos iniciado! Redirecionando para checkout seguro...`);
           setTimeout(() => setSuccessMsg(null), 4000);
       }
   };
 
-  if (loading) return <div className="p-10 text-center text-slate-500 animate-pulse">Carregando planos...</div>;
+  // FILTER LOGIC: Hide Free plan if user is on a paid plan
+  const currentTierOrder = planOrder[currentPlan.toUpperCase()] || 0;
+  const filteredTiers = tiers.filter(tier => {
+      const tierOrder = planOrder[tier.id.toUpperCase()] || 0;
+      // If user is paid (order > 0), hide free plan (order 0)
+      if (currentTierOrder > 0 && tierOrder === 0) return false;
+      return true;
+  });
+
+  if (loading) return <div className="p-20 text-center text-slate-500 animate-pulse flex justify-center">Carregando planos...</div>;
 
   return (
-    <div className="space-y-12 pb-20">
+    <div className="min-h-screen bg-background pt-32 pb-20 px-4 sm:px-6 lg:px-8">
       
-      {/* Header */}
-      <div className="text-center space-y-4 max-w-2xl mx-auto">
-        <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-          Escale sua produção criativa
+      {/* Header com Espaçamento e Hierarquia Melhorados */}
+      <div className="text-center max-w-3xl mx-auto mb-24 space-y-6">
+        <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-blue-300 drop-shadow-sm">
+          Planos e Potência
         </h1>
-        <p className="text-slate-400 text-lg">
-          Escolha o plano que melhor se adapta ao seu volume de trabalho. 
-          Faça upgrade ou cancele a qualquer momento.
+        <p className="text-xl text-slate-400 font-light leading-relaxed">
+          Escolha o nível de acesso ideal para sua escala. <br/>
+          O seu plano atual é o <span className="text-white font-semibold border-b border-primary/50">{currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1).toLowerCase()}</span>.
         </p>
       </div>
 
-      {/* Feedback Alerts (Sticky top if needed, currently inline) */}
-      <div className="max-w-4xl mx-auto space-y-4 px-4">
+      {/* Feedback Alerts */}
+      <div className="max-w-4xl mx-auto space-y-4 mb-12 sticky top-20 z-30">
           {errorMsg && (
-            <Alert variant="destructive" className="bg-red-500/10 border-red-500/30 text-red-400 animate-in fade-in slide-in-from-top-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Acesso Restrito</AlertTitle>
+            <Alert variant="destructive" className="bg-red-950/50 border-red-500/30 text-red-200 backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+                <AlertCircle className="h-5 w-5 text-red-400" />
+                <AlertTitle className="text-red-400">Acesso Restrito</AlertTitle>
                 <AlertDescription>{errorMsg}</AlertDescription>
             </Alert>
           )}
           {successMsg && (
-            <Alert className="bg-green-500/10 border-green-500/30 text-green-400 animate-in fade-in slide-in-from-top-2">
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertTitle>Sucesso</AlertTitle>
+            <Alert className="bg-green-950/50 border-green-500/30 text-green-200 backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+                <CheckCircle2 className="h-5 w-5 text-green-400" />
+                <AlertTitle className="text-green-400">Sucesso</AlertTitle>
                 <AlertDescription>{successMsg}</AlertDescription>
             </Alert>
           )}
           {infoMsg && (
-            <Alert className="bg-primary/10 border-primary/30 text-primary animate-in fade-in slide-in-from-top-2">
-                <Zap className="h-4 w-4" />
-                <AlertTitle>Processando</AlertTitle>
+            <Alert className="bg-blue-950/50 border-blue-500/30 text-blue-200 backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+                <Zap className="h-5 w-5 text-blue-400" />
+                <AlertTitle className="text-blue-400">Processando</AlertTitle>
                 <AlertDescription>{infoMsg}</AlertDescription>
             </Alert>
           )}
       </div>
 
       {/* Plans Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-4 max-w-[1400px] mx-auto">
-        {tiers.map((tier) => {
-            const isCurrent = currentPlan.toUpperCase() === tier.id.toUpperCase();
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto mb-32">
+        {filteredTiers.map((tier) => {
+            const btnState = getButtonState(tier.id);
             const Icon = tier.icon;
+            const isCurrent = btnState === 'current';
             
             return (
                 <Card 
                     key={tier.id} 
                     className={cn(
-                        "relative flex flex-col transition-all duration-300 h-full border",
+                        "relative flex flex-col transition-all duration-300 h-full border-2",
                         isCurrent 
-                            ? "bg-primary/5 border-primary ring-1 ring-primary/50 shadow-[0_0_20px_rgba(0,167,225,0.1)] scale-[1.02] z-10" 
-                            : "bg-surface border-white/5 hover:border-white/20 hover:bg-surface/80 hover:-translate-y-1"
+                            ? "bg-surface border-primary shadow-[0_0_40px_rgba(0,167,225,0.15)] scale-[1.02] z-10" 
+                            : "bg-surface/40 border-white/5 hover:border-white/10 hover:bg-surface/60"
                     )}
                 >
                     {isCurrent && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                            <Badge className="bg-primary text-white border-none px-3 py-0.5 shadow-lg">
+                        <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+                            <Badge className="bg-primary text-white border-none px-4 py-1 text-sm font-semibold shadow-xl">
                                 Seu Plano Atual
                             </Badge>
                         </div>
                     )}
-                    {tier.popular && !isCurrent && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                            <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-purple-500/50">
-                                Mais Popular
-                            </Badge>
-                        </div>
-                    )}
                     
-                    <CardHeader className="text-center pb-4">
-                        <div className={cn("mx-auto p-3 rounded-full mb-3 w-fit bg-surface border border-white/10", tier.color)}>
-                            <Icon className="h-6 w-6" />
+                    <CardHeader className="text-center pb-6 pt-8">
+                        <div className={cn("mx-auto p-4 rounded-2xl mb-4 w-fit bg-black/20 border border-white/5 shadow-inner", tier.color)}>
+                            <Icon className="h-8 w-8" />
                         </div>
-                        <CardTitle className="text-xl font-bold text-white">{tier.name}</CardTitle>
-                        <CardDescription className="text-sm text-slate-400 min-h-[40px]">{tier.description}</CardDescription>
-                        <div className="pt-4 pb-2">
-                            <span className="text-3xl font-bold text-white">{tier.price}</span>
+                        <CardTitle className="text-2xl font-bold text-white">{tier.name}</CardTitle>
+                        <div className="pt-2 pb-2">
+                            <span className="text-4xl font-bold text-white tracking-tight">{tier.price}</span>
                         </div>
+                        <CardDescription className="text-sm text-slate-400 min-h-[40px] px-4">{tier.description}</CardDescription>
                     </CardHeader>
                     
-                    <CardContent className="flex-1">
-                        <div className="h-px bg-white/5 w-full mb-6"></div>
-                        <ul className="space-y-3">
+                    <CardContent className="flex-1 px-8">
+                        <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent w-full mb-6"></div>
+                        <ul className="space-y-4">
                             {tier.features.map((feat, i) => (
                                 <li key={i} className="flex items-start gap-3 text-sm text-slate-300">
-                                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                                    <div className="mt-0.5 rounded-full bg-green-500/10 p-0.5">
+                                        <Check className="h-3 w-3 text-green-500 shrink-0" />
+                                    </div>
                                     <span className="leading-tight">{feat}</span>
                                 </li>
                             ))}
                         </ul>
                     </CardContent>
                     
-                    <CardFooter className="pt-4">
+                    <CardFooter className="pt-6 pb-8 px-8">
                         <Button 
                             className={cn(
-                                "w-full font-semibold h-11", 
+                                "w-full font-bold h-12 text-base shadow-lg transition-all", 
                                 isCurrent 
-                                    ? "bg-white/5 text-slate-400 border border-white/10 cursor-not-allowed hover:bg-white/5" 
-                                    : "bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20"
+                                    ? "bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed" 
+                                    : btnState === 'upgrade'
+                                        ? "bg-primary hover:bg-primary-dark text-white shadow-primary/20 hover:scale-[1.02]"
+                                        : "bg-surface hover:bg-surface/80 border border-white/10 text-slate-300"
                             )}
-                            onClick={() => !isCurrent && handleUpgrade(tier.name)}
+                            onClick={() => !isCurrent && handleAction(tier.name, btnState === 'upgrade' ? 'upgrade' : 'downgrade')}
                             disabled={isCurrent}
                         >
-                            {isCurrent ? "Plano Atual" : "Fazer Upgrade"}
+                            {isCurrent && "Plano Atual"}
+                            {btnState === 'upgrade' && <span className="flex items-center">Fazer Upgrade <ArrowUp className="ml-2 h-4 w-4" /></span>}
+                            {btnState === 'downgrade' && <span className="flex items-center">Fazer Downgrade <ArrowDown className="ml-2 h-4 w-4" /></span>}
                         </Button>
                     </CardFooter>
                 </Card>
@@ -231,63 +264,66 @@ export default function PlansPage() {
         })}
       </div>
 
-      {/* Credit Purchase Section */}
-      <div className="max-w-4xl mx-auto px-4 mt-20">
-          <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-yellow-500/10 rounded-lg border border-yellow-500/20">
-                  <Zap className="h-6 w-6 text-yellow-500" />
-              </div>
-              <div>
-                  <h3 className="text-xl font-bold text-white">Pacotes de Créditos Avulsos</h3>
-                  <p className="text-slate-400 text-sm">Precisa de mais potência este mês? Adicione créditos sem mudar de plano.</p>
-              </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[
-                  { amount: 500, price: 'R$ 30', label: 'Pack Básico' },
-                  { amount: 1500, price: 'R$ 75', label: 'Melhor Valor', popular: true },
-                  { amount: 4000, price: 'R$ 180', label: 'Pack Pro' }
-              ].map((pkg, idx) => (
-                  <div 
-                    key={idx} 
-                    className={cn(
-                        "group border rounded-xl p-5 flex flex-col gap-3 cursor-pointer transition-all hover:border-primary/50 relative overflow-hidden", 
-                        pkg.popular ? "border-primary/30 bg-primary/5" : "border-white/10 bg-surface/30"
-                    )}
-                    onClick={() => handleBuyCredits(pkg.amount)}
-                  >
-                      {pkg.popular && (
-                          <div className="absolute top-0 right-0 bg-primary text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">
-                              POPULAR
-                          </div>
-                      )}
-                      
-                      <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-slate-400">{pkg.label}</span>
-                      </div>
-                      
-                      <div className="flex items-baseline gap-1">
-                          <span className="text-2xl font-bold text-white">{pkg.amount}</span>
-                          <span className="text-sm text-yellow-500 font-medium">Tokens</span>
-                      </div>
-                      
-                      <div className="mt-auto pt-3 border-t border-white/5 flex justify-between items-center group-hover:border-white/10 transition-colors">
-                          <span className="text-lg font-semibold text-slate-200">{pkg.price}</span>
-                          <Button size="sm" variant="ghost" className="h-8 text-xs hover:bg-white/10 text-primary">
-                              Comprar
-                          </Button>
-                      </div>
+      {/* Credit Purchase Section - Highlighted */}
+      <div className="max-w-5xl mx-auto">
+          <div className="bg-surface/30 border border-white/5 rounded-3xl p-8 md:p-12 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+              
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-6 mb-10 relative z-10">
+                  <div className="p-4 bg-yellow-500/10 rounded-2xl border border-yellow-500/20 shadow-[0_0_30px_rgba(234,179,8,0.1)]">
+                      <Zap className="h-8 w-8 text-yellow-500 fill-yellow-500" />
                   </div>
-              ))}
-          </div>
-          
-          <div className="mt-6 flex items-start gap-2 bg-surface/50 p-4 rounded-lg border border-white/5 text-xs text-slate-500">
-             <Shield className="h-4 w-4 shrink-0 text-slate-400" />
-             <p>
-                Créditos avulsos não expiram enquanto sua conta estiver ativa. 
-                A compra de créditos avulsos está disponível apenas para assinantes de planos pagos (Starter, Pro, Agency).
-             </p>
+                  <div>
+                      <h3 className="text-2xl md:text-3xl font-bold text-white mb-2">Pacotes de Créditos Avulsos</h3>
+                      <p className="text-slate-400 text-base max-w-xl">
+                          Precisa de mais potência este mês? Adicione créditos instantâneos à sua conta sem alterar sua assinatura recorrente.
+                      </p>
+                  </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 relative z-10">
+                  {[
+                      { amount: 500, price: 'R$ 30', label: 'Pack Básico' },
+                      { amount: 1500, price: 'R$ 75', label: 'Melhor Valor', popular: true },
+                      { amount: 4000, price: 'R$ 180', label: 'Pack Pro' }
+                  ].map((pkg, idx) => (
+                      <div 
+                        key={idx} 
+                        className={cn(
+                            "group border rounded-2xl p-6 flex flex-col gap-4 cursor-pointer transition-all hover:-translate-y-1", 
+                            pkg.popular 
+                                ? "border-primary/30 bg-gradient-to-b from-primary/10 to-surface/50 hover:shadow-[0_0_20px_rgba(0,167,225,0.1)]" 
+                                : "border-white/5 bg-black/20 hover:bg-black/40 hover:border-white/10"
+                        )}
+                        onClick={() => handleBuyCredits(pkg.amount)}
+                      >
+                          {pkg.popular && (
+                              <div className="self-start bg-primary text-white text-[10px] uppercase font-bold px-2 py-1 rounded-md mb-1">
+                                  Mais Vendido
+                              </div>
+                          )}
+                          
+                          <div className="flex justify-between items-end">
+                              <div>
+                                <span className="text-3xl font-bold text-white">{pkg.amount}</span>
+                                <span className="text-sm text-yellow-500 font-medium ml-1">Tokens</span>
+                              </div>
+                          </div>
+                          
+                          <div className="mt-auto pt-4 border-t border-white/5 flex justify-between items-center group-hover:border-white/10 transition-colors">
+                              <span className="text-xl font-semibold text-slate-200">{pkg.price}</span>
+                              <Button size="sm" variant="ghost" className="h-9 text-xs hover:bg-white/10 text-primary hover:text-white">
+                                  Comprar <Zap className="ml-1 h-3 w-3" />
+                              </Button>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+              
+              <div className="mt-8 flex items-center justify-center gap-2 text-xs text-slate-500 bg-black/20 py-3 rounded-full w-fit mx-auto px-6 border border-white/5">
+                 <Shield className="h-3 w-3 shrink-0" />
+                 <p>Disponível apenas para assinantes ativos (Starter, Pro, Agency).</p>
+              </div>
           </div>
       </div>
 
