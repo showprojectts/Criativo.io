@@ -154,14 +154,19 @@ export default function CreatePage() {
   };
 
   const getApiKey = () => {
-    // API KEY CONSTANT - As requested
-    const staticKey = "AIzaSyC3jfqJZSO5iUoGLV_xuOq1xnHi6Ia9vII"; 
+    // 1. Tenta ler do Vite (Padrão Vercel/Vite - OBRIGATÓRIO VITE_ prefixo)
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) {
+      return import.meta.env.VITE_GEMINI_API_KEY;
+    }
     
-    try {
-      if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-        return process.env.API_KEY;
-      }
-    } catch (e) {}
+    // 2. Fallback para process.env (caso o build exponha dessa forma)
+    if (typeof process !== 'undefined' && process.env) {
+       if (process.env.VITE_GEMINI_API_KEY) return process.env.VITE_GEMINI_API_KEY;
+       if (process.env.NEXT_PUBLIC_GEMINI_API_KEY) return process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    }
+
+    // 3. Fallback Estático (Último recurso para evitar crash, mas idealmente deve vir do ENV)
+    const staticKey = "AIzaSyC3jfqJZSO5iUoGLV_xuOq1xnHi6Ia9vII"; 
     return staticKey;
   };
 
@@ -192,7 +197,7 @@ export default function CreatePage() {
       }
     } catch (err: any) {
       console.error("Gemini Suggestion Error:", err);
-      setError("Não foi possível gerar sugestão no momento.");
+      setError("Não foi possível gerar sugestão no momento. Verifique a chave de API.");
     } finally {
       setIsSuggesting(false);
     }
@@ -227,42 +232,26 @@ export default function CreatePage() {
       // 1. CHAMAR API DE IA (GERAÇÃO)
       // ---------------------------------------------------------
       const apiKey = getApiKey();
+      if (!apiKey) throw new Error("API Key não encontrada.");
+
       const finalPrompt = constructFinalPrompt();
       const ai = new GoogleGenAI({ apiKey });
       
       let tempImageUrl = null;
-      let realModelName = 'gemini-2.5-flash-image';
+      let realModelName = 'gemini-2.5-flash-image'; // Default
 
-      if (mode === 'nano') {
-        realModelName = 'gemini-2.5-flash-image';
-        const response = await ai.models.generateContent({
-            model: realModelName,
-            contents: { parts: [{ text: finalPrompt }] },
-        });
+      const response = await ai.models.generateContent({
+          model: realModelName,
+          contents: { parts: [{ text: finalPrompt }] },
+      });
 
-        if (response.candidates?.[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    tempImageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                    break;
-                }
-            }
-        }
-      } else {
-        // Fallback/Placeholder for other models for now using Gemini
-        realModelName = 'gemini-2.5-flash-image';
-        const response = await ai.models.generateContent({
-            model: realModelName,
-            contents: { parts: [{ text: finalPrompt }] },
-        });
-         if (response.candidates?.[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    tempImageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                    break;
-                }
-            }
-        }
+      if (response.candidates?.[0]?.content?.parts) {
+          for (const part of response.candidates[0].content.parts) {
+              if (part.inlineData) {
+                  tempImageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                  break;
+              }
+          }
       }
       
       if (!tempImageUrl) {
@@ -323,15 +312,16 @@ export default function CreatePage() {
 
     } catch (err: any) {
       console.error("Erro no fluxo de geração:", err);
-      setError(err.message || "Ocorreu um erro ao processar sua solicitação.");
-      setResultUrl(null); // Garante que a imagem fica oculta em caso de erro
+      // Extrai mensagem de erro limpa se for do Google GenAI
+      const msg = err.message || "Ocorreu um erro ao processar sua solicitação.";
+      setError(msg.includes("API Key") ? "Erro de Configuração: API Key Inválida." : msg);
+      setResultUrl(null); 
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const currentCost = COST_MAP[mode];
-  const canGenerate = theme.trim().length > 0 && balance >= currentCost && !isGenerating && !loadingUser;
+  const canGenerate = theme.trim().length > 0 && balance >= COST_MAP[mode] && !isGenerating && !loadingUser;
 
   return (
     <div className="h-full bg-background text-slate-50 font-sans p-4 lg:p-6 overflow-hidden flex flex-col">
@@ -494,7 +484,7 @@ export default function CreatePage() {
                 disabled={!canGenerate}
                 className={cn(
                   "w-full h-14 text-base font-bold shadow-lg transition-all",
-                  (balance < currentCost)
+                  (balance < COST_MAP[mode])
                     ? "bg-slate-700 text-slate-400 cursor-not-allowed"
                     : "bg-primary hover:bg-primary-dark shadow-primary/20"
                 )}
@@ -503,12 +493,12 @@ export default function CreatePage() {
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Gerando...
                   </>
-                ) : balance < currentCost ? (
+                ) : balance < COST_MAP[mode] ? (
                    "Créditos Insuficientes"
                 ) : (
                   <>
                     <Wand2 className="mr-2 h-5 w-5" /> 
-                    Gerar (-{currentCost} {currentCost > 1 ? 'Créditos' : 'Crédito'})
+                    Gerar (-{COST_MAP[mode]} {COST_MAP[mode] > 1 ? 'Créditos' : 'Crédito'})
                   </>
                 )}
               </Button>
