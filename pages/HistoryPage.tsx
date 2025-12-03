@@ -206,7 +206,7 @@ export default function HistoryPage() {
                 <CardContent className="p-4">
                   <div className="flex justify-between items-start mb-2">
                     <Badge variant="outline" className="text-[10px] border-primary/20 bg-primary/5 text-primary">
-                      {gen.model_id || gen.model_used || "Unknown"}
+                      {gen.model_id || "Unknown"}
                     </Badge>
                     <span className="text-[10px] text-slate-500 flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
